@@ -1,0 +1,106 @@
+"Summary","Issue Type","Labels","Description"
+"V1 Two customers buy the last unit (20 repeated trials)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Exactly one order is created, the other receives OUT_OF_STOCK, reserved=1, invariants hold in every trial
+
+Observed behaviour:
+20/20 trials gave (1 order, 1 OUT_OF_STOCK, reserved=1); invariants I1-I8 held in all trials"
+"V2 Same payment callback delivered 8 times while the first is still processing","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+1 APPLIED + 7 DUPLICATE_IGNORED; exactly 1 payment, 1 shipment, 1 outbox message, 1 audit entry
+
+Observed behaviour:
+1 APPLIED + 7 DUPLICATE_IGNORED; payments=1, shipments=1, outbox=1, PAYMENT_APPLIED audit rows=1"
+"V3 Refund: execute before approval; approved refund fails at gateway; retry; repeated failure","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Pre-approval execution denied with 0 gateway calls; 1st failure -> RETRY_PENDING, retry -> EXECUTED with 1 gateway refund; 3 straight failures -> ROLLED_BACK and refundable amount restored
+
+Observed behaviour:
+pre-approval=NOT_APPROVED (gateway calls=0); first attempt=RETRY_PENDING, retry=EXECUTED, distinct gateway refunds=1; 3 failures=['RETRY_PENDING', 'RETRY_PENDING', 'ROLLED_BACK']; refundable after rollback=3260 (total 4760 - executed 1500)"
+"V4 Dispatch without confirmed payment / without pick confirmation / without courier label","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+unpaid -> NOT_PAID; paid but not picked -> NOT_PICKED; picked but no label -> NO_COURIER_LABEL; all met -> DISPATCHED; pick scan for unpaid order rejected
+
+Observed behaviour:
+dispatch results: NOT_PAID, NOT_PICKED, NO_COURIER_LABEL, DISPATCHED; pick scan on unpaid order -> REJECTED_NOT_PAID"
+"V5 Courier synchronisation fails after the order is stored, then is retried","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Order stays PAID with local record intact; outbox attempt=1; after recovery exactly one courier shipment is created; after 5 failures an alert state is raised
+
+Observed behaviour:
+first run failed=1, order status=PAID, outbox attempts=1, shipment=PENDING_SYNC; after recovery done=1, second worker pass done=0, courier shipments created=1, final=SYNCED; after 6 outage passes outbox=FAILED_ALERT (attempts=5), shipment=SYNC_FAILED"
+"V6 Privilege and ownership attacks (role spoofing, customer/support/admin approving, cross-customer and cross-region access)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Support (even claiming finance role), customer and admin approvals FORBIDDEN; other customer and other-region manager cannot read the order; support sees status but no payment data; finance sees payment data; refund still REQUESTED; each denial audited
+
+Observed behaviour:
+support+claimed finance=FORBIDDEN, customer=FORBIDDEN, admin=FORBIDDEN; other customer view ok=False; other-region manager ok=False; support view has payment data=False; finance view has payment data=True; refund status=REQUESTED; DENIED audit rows=5"
+"V7 Abandoned unpaid checkout holds the last unit for one hour (reservation expiry, TTL 15 min)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+After the 15-minute reservation window the first order is cancelled, stock is released, and the second customer can buy the unit
+
+Observed behaviour:
+expiry sweep result=1; second customer's order -> ORDER_CREATED"
+"V8 Price/tax integrity and callback authenticity (client sends total=1; forged signature; short payment)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Server total = subtotal 2900 + tax 18% 522 + shipping 40 = 3462; forged signature rejected; short payment rejected; correct callback applied
+
+Observed behaviour:
+stored total=3462 (client claimed 1, ignored); forged=BAD_SIGNATURE; short payment=AMOUNT_MISMATCH; valid=APPLIED; order status=PAID"
+"V9 Payment callback arrives after the reservation has expired (late payment)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Order is not resurrected; the payment is stored as UNAPPLIED and flagged for finance reconciliation; invariants hold
+
+Observed behaviour:
+callback result=ORDER_NOT_PAYABLE; payment row applied flag=0; order status=CANCELLED"
+"V10 Dispatch deadline: paid orders not dispatched within 24 h are flagged","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Both paid orders are listed as overdue after 25 h; once one is dispatched only the other remains listed
+
+Observed behaviour:
+overdue before dispatch=2 (True); after dispatching one=1 (remaining is the undispatched order: True)"
+"V11 Stock correction is a human decision (negative scan adjustments)","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Negative adjustments wait as PENDING; picker cannot approve; manager approval that would drop stock below reserved units is refused; a safe correction is applied only after manager approval
+
+Observed behaviour:
+scan results=PENDING_MANAGER_APPROVAL, PENDING_MANAGER_APPROVAL; picker approval=FORBIDDEN; manager approval breaking reservation=WOULD_BREAK_RESERVATIONS; safe manager approval=APPROVED (SKU-B on_hand 10000 -> 9996)"
+"W1 Load: 1,000 mixed events (500 payment callbacks, 300 stock events, 200 pick scans; 100 deliberate duplicates), 8 concurrent workers, 12 regions","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Exactly 450 unique payments applied once (no duplicates); 270 stock receipts applied once (on_hand 100 -> 370); 180 picks applied; 100 duplicates ignored; invariants hold; prototype processes >16.7 events/s (planning rate 1,000/min)
+
+Observed behaviour:
+unique payments applied=450; duplicates ignored=100; on_hand=370; PACKED orders=180; outbox messages=630 (one per paid order, 630 expected); elapsed=0.9s => 1132 events/s on this sandbox (planning need 16.7/s); invariants I1-I8 all hold=True"
+"W2 Disconnected scanner: buffered events, retransmission after lost acknowledgement, offline refund approvals","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+While offline both approvals display PENDING_SERVER_VALIDATION and the server is unchanged; after sync each unique event is applied once despite resends (30 picks applied, unpaid-order pick rejected, +5 stock applied, -4 held for manager, 0 packed before sync); finance approval accepted, support approval rejected by the server
+
+Observed behaviour:
+offline display=('PENDING_SERVER_VALIDATION', 'PENDING_SERVER_VALIDATION'), server refund status while offline=REQUESTED; after two sync passes: PACKED orders=30 (0 before sync), distinct events stored=35 (33 sent by the node + 2 earlier), sent in sync pass 1=43 (incl. resends), pass 2=43, SKU-B on_hand=10005 (10,000+5), negative correction=PENDING; refund statuses on server: finance-queued=APPROVED, support-queued=REQUESTED; local state of support approval=SERVER_REJECTED:FORBIDDEN; invariants hold=True"
+"W3 Partial failure: courier API down for 2 of 12 regions; consolidated report remains reconcilable","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+10 regions dispatch normally; R03 and R07 orders stay PACKED (NO_COURIER_LABEL) with payment intact; report shows pending events only for R03/R07 and its sales total equals the sum of paid orders; after recovery both dispatch and pending count is 0
+
+Observed behaviour:
+dispatched during outage=10/12; blocked=['R03', 'R07']; pending-event regions in report=['R03', 'R07']; report sales total=14940 vs independent sum 14940; after recovery R03/R07 -> ['DISPATCHED', 'DISPATCHED']; pending events remaining=0"
+"W4 Regional rules: same basket in R01 vs R02; refund above the region's local approval limit","Task","validation","Result (run 2, prototype v1.1): PASS
+
+Predicted behaviour:
+Totals differ by region tax/shipping; manager approval above regional limit refused (home-region and foreign-region managers alike); finance approves
+
+Observed behaviour:
+R01 total=2400, R02 total=2290; R01 manager=ABOVE_APPROVER_LIMIT, R02 manager=ABOVE_APPROVER_LIMIT, finance=APPROVED"

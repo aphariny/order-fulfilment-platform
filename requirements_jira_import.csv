@@ -1,0 +1,351 @@
+"Summary","Issue Type","Priority","Labels","Description"
+"FR-01 The customer shall browse the catalogue and add items to a cart; the cart shows an estimated total.","Story","High","fr rev-1.0 must","The customer shall browse the catalogue and add items to a cart; the cart shows an estimated total.
+
+Source: Customer (IQ-1, IQ-8)
+Priority score: 4.2 (Must)  V=5 R=3 E=1
+Revision: 1.0
+
+Acceptance criteria:
+Given 3 catalogue items, the cart lists SKU, quantity and unit price; the estimate equals the server total at checkout (difference = 0).
+
+Traceability: UML: Use case Place order; classes Product, OrderLine | Component: Order & Checkout (incl. catalogue/cart) | Validation: V8; UI test T-UI-1 (planned, not run)"
+"FR-02 The system shall calculate subtotal, tax and shipping on the server from catalogue prices and the order region's rule; c","Story","High","fr rev-1.0 must","The system shall calculate subtotal, tax and shipping on the server from catalogue prices and the order region's rule; client-supplied totals are ignored.
+
+Source: Finance (IQ-3), Customer
+Priority score: 4.8 (Must)  V=5 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Basket 2×1000 + 3×300 in R01 (tax 18 %, shipping 40) = 3,462; a client-sent total of 1 is ignored and audited.
+
+Traceability: UML: Use case Place order; class Order.total, RegionRule | Component: Order & Checkout; Regional Rules | Validation: V8, W4"
+"FR-03 On order placement the system shall reserve each line's quantity only if on_hand − reserved ≥ quantity, in the same tran","Story","High","fr rev-1.0 must","On order placement the system shall reserve each line's quantity only if on_hand − reserved ≥ quantity, in the same transaction that creates the order.
+
+Source: Customer, Picker (IQ-1)
+Priority score: 4.6 (Must)  V=5 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Two customers order the last unit simultaneously: exactly one order is created, the other gets OUT_OF_STOCK, reserved = 1 (repeat 20 times, 0 failures).
+
+Traceability: UML: Use case «include» Reserve stock; StockItem.reserve(); state Placed | Component: Inventory | Validation: V1"
+"FR-04 An unpaid order shall expire 15 minutes after placement: status Cancelled and its reserved units are released.","Story","High","fr rev-1.1 must","An unpaid order shall expire 15 minutes after placement: status Cancelled and its reserved units are released.
+
+Source: Validation finding V7 (Rev 1.1); Customer (IQ-1)
+Priority score: 4.4 (Must)  V=4 R=5 E=2
+Revision: 1.1
+
+Acceptance criteria:
+Order placed at t0 and unpaid; at t0 + 60 min the sweeper cancels it, reserved returns to 0 and another customer can buy the unit.
+
+Traceability: UML: State Placed→Cancelled; Order.reserveExpiresAt | Component: Background worker (expiry sweeper); Inventory | Validation: V7, V9"
+"FR-05 A customer shall see only their own orders; a store manager only orders of their own region; a picker only pick lists.","Story","High","fr rev-1.0 must","A customer shall see only their own orders; a store manager only orders of their own region; a picker only pick lists.
+
+Source: Admin (IQ-6), Support (IQ-2)
+Priority score: 4.4 (Must)  V=4 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Customer B requests customer A's order: response is indistinguishable from 'not found' and a DENIED audit row is written.
+
+Traceability: UML: Use cases Track order, View status; User.role/region | Component: Identity & Access | Validation: V6"
+"FR-06 Order status shall change only along the permitted transitions of the order state machine; any other attempt is rejected","Story","High","fr rev-1.0 must","Order status shall change only along the permitted transitions of the order state machine; any other attempt is rejected with a reason code and audited.
+
+Source: Finance, Store manager
+Priority score: 4.2 (Must)  V=4 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Dispatch of a PLACED order returns NOT_PAID; of a PAID, unpicked order returns NOT_PICKED; no state change occurs.
+
+Traceability: UML: Order state machine (Fig. 5) | Component: Order & Checkout | Validation: V4"
+"FR-07 A payment callback shall be authenticated (HMAC), matched to an order and total, and processed at most once per gateway ","Story","High","fr rev-1.0 must","A payment callback shall be authenticated (HMAC), matched to an order and total, and processed at most once per gateway event id; repeats return success with no side effect.
+
+Source: Finance, Courier/Gateway constraint
+Priority score: 4.8 (Must)  V=5 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+The same callback delivered 8 times while the first is in flight yields 1 payment, 1 shipment, 1 outbox message, 1 audit row; a forged signature or wrong amount is rejected.
+
+Traceability: UML: Sequence (steps 1–11); Payment.gatewayEventId {unique} | Component: Payment Integration | Validation: V2, V8, W1"
+"FR-08 A payment that arrives for an order that is no longer payable shall be stored as unapplied and listed for finance reconc","Story","Medium","fr rev-1.1 should","A payment that arrives for an order that is no longer payable shall be stored as unapplied and listed for finance reconciliation; it never revives the order.
+
+Source: Validation finding V9 (Rev 1.1); Finance
+Priority score: 3.6 (Should)  V=3 R=4 E=2
+Revision: 1.1
+
+Acceptance criteria:
+Callback after expiry returns ORDER_NOT_PAYABLE; the payment row has applied = false; order stays Cancelled; report shows 1 unapplied payment.
+
+Traceability: UML: Sequence alt-frame; Payment.applied | Component: Payment Integration; Reporting | Validation: V9"
+"FR-09 After payment the system shall create a shipment record and an outbox message; courier synchronisation retries with expo","Story","High","fr rev-1.0 must","After payment the system shall create a shipment record and an outbox message; courier synchronisation retries with exponential back-off up to 5 attempts and then raises an alert, without ever rolling back the paid order.
+
+Source: Engineers, Support (IQ-8)
+Priority score: 4.2 (Must)  V=4 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+With the courier down the order stays PAID, attempts increments; after recovery exactly 1 courier shipment exists; after 5 failures the shipment is SYNC_FAILED.
+
+Traceability: UML: Sequence (steps 12–18); Shipment, OutboxMessage | Component: Background worker; Fulfilment | Validation: V5, W3"
+"FR-10 A picker shall confirm picks for PAID orders; the confirmation moves the order to Packed and is idempotent by event id.","Story","High","fr rev-1.0 must","A picker shall confirm picks for PAID orders; the confirmation moves the order to Packed and is idempotent by event id.
+
+Source: Picker (IQ-4)
+Priority score: 4.4 (Must)  V=5 R=4 E=2
+Revision: 1.0
+
+Acceptance criteria:
+A pick scan on an unpaid order is rejected (REJECTED_NOT_PAID); a repeated scan id is ignored.
+
+Traceability: UML: Use case Confirm pick; ScanEvent | Component: Fulfilment | Validation: V4, W1, W2"
+"FR-11 Dispatch shall be allowed only for Packed orders with an applied payment, pick confirmation and a courier reference; it ","Story","High","fr rev-1.0 must","Dispatch shall be allowed only for Packed orders with an applied payment, pick confirmation and a courier reference; it then decrements on-hand and reserved stock.
+
+Source: Store manager, Finance
+Priority score: 4.6 (Must)  V=5 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Dispatch is refused with NOT_PAID, NOT_PICKED or NO_COURIER_LABEL until each condition is met; then DISPATCHED and stock decreases by the ordered quantity.
+
+Traceability: UML: Use case Dispatch order; state Packed→Dispatched | Component: Fulfilment; Inventory | Validation: V4"
+"FR-12 Orders paid but not dispatched within 24 hours shall be flagged as overdue to the store manager.","Story","Medium","fr rev-1.0 should","Orders paid but not dispatched within 24 hours shall be flagged as overdue to the store manager.
+
+Source: Store manager, Customer
+Priority score: 3.6 (Should)  V=4 R=3 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Two paid orders 25 h old are listed; after one is dispatched only the other is listed.
+
+Traceability: UML: Use case Review overdue dispatches; Order.paidAt | Component: Fulfilment; Reporting | Validation: V10"
+"FR-13 A customer (own order) or a support agent shall be able to request a refund for a PAID or DELIVERED order for at most th","Story","High","fr rev-1.0 must","A customer (own order) or a support agent shall be able to request a refund for a PAID or DELIVERED order for at most the still-refundable amount.
+
+Source: Customer, Support (IQ-2)
+Priority score: 4.4 (Must)  V=4 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Requests above (paid − active refunds) return EXCEEDS_REFUNDABLE; requests on PLACED orders return STATUS_NOT_REFUNDABLE.
+
+Traceability: UML: Use case Request return / refund; Refund.request() | Component: Returns & Refunds | Validation: V3, V6"
+"FR-14 Only a store manager (own region, amount ≤ regional limit) or a finance reviewer may approve a refund; the approver must","Story","High","fr rev-1.0 must","Only a store manager (own region, amount ≤ regional limit) or a finance reviewer may approve a refund; the approver must differ from the requester; customers, support agents and administrators can never approve, whatever role the client claims.
+
+Source: Finance (IQ-3), Admin (IQ-6)
+Priority score: 4.2 (Must)  V=4 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Support (claiming finance), customer and admin approvals return FORBIDDEN; a manager approving above the regional limit returns ABOVE_APPROVER_LIMIT.
+
+Traceability: UML: Use case Approve or reject refund; refund state Requested→Approved | Component: Returns & Refunds; Identity & Access | Validation: V6, W4, W2"
+"FR-15 A refund shall be executed at the gateway only from Approved or RetryPending, using the refund id as idempotency key; af","Story","High","fr rev-1.0 must","A refund shall be executed at the gateway only from Approved or RetryPending, using the refund id as idempotency key; after 3 failed attempts it is rolled back and finance is alerted.
+
+Source: Finance
+Priority score: 4.2 (Must)  V=4 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Execution before approval is denied with 0 gateway calls; one failure then success yields 1 gateway refund; 3 failures give ROLLED_BACK and the refundable amount is restored.
+
+Traceability: UML: Refund state machine (Fig. 6); Refund.attempts | Component: Returns & Refunds; Payment Integration | Validation: V3"
+"FR-16 Every refund state change, privileged action, denied attempt, stock correction and rule change shall be recorded in an a","Story","High","fr rev-1.0 must","Every refund state change, privileged action, denied attempt, stock correction and rule change shall be recorded in an append-only audit log with actor, time and entity.
+
+Source: Finance (IQ-3), Admin
+Priority score: 4.4 (Must)  V=4 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+After each validation scenario every non-initial refund state has ≥ 1 audit row; every denial in V6 has a DENIED audit row.
+
+Traceability: UML: Class AuditEntry | Component: Audit | Validation: V6, V3 (invariant I7)"
+"FR-17 Negative stock adjustments from scans shall wait as pending corrections until a store manager approves them, and shall b","Story","High","fr rev-1.0 must","Negative stock adjustments from scans shall wait as pending corrections until a store manager approves them, and shall be refused if they would reduce on-hand below reserved units.
+
+Source: Store manager (IQ-5), Picker
+Priority score: 4.2 (Must)  V=4 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+A −4 scan stays PENDING; the picker cannot approve; the manager's approval that would break a reservation is refused; a safe correction is applied after approval.
+
+Traceability: UML: Use case Approve stock correction; StockCorrection | Component: Inventory | Validation: V11, W2"
+"FR-18 The customer shall see order status and tracking events (placed, paid, packed, dispatched, delivered).","Story","Medium","fr rev-1.0 should","The customer shall see order status and tracking events (placed, paid, packed, dispatched, delivered).
+
+Source: Customer (IQ-8)
+Priority score: 3.6 (Should)  V=5 R=2 E=2
+Revision: 1.0
+
+Acceptance criteria:
+After each state change the tracking page shows the new status within 60 s (see NFR-01).
+
+Traceability: UML: Use case Track order and delivery | Component: Order & Checkout | Validation: Not yet validated – gap G-2 (test T-UI-2 planned)"
+"FR-19 A support agent shall see order and refund status but no payment data.","Story","High","fr rev-1.0 must","A support agent shall see order and refund status but no payment data.
+
+Source: Support (IQ-2)
+Priority score: 4.6 (Must)  V=4 R=5 E=1
+Revision: 1.0
+
+Acceptance criteria:
+The support view of an order contains no payment fields; the finance view of the same order does.
+
+Traceability: UML: Use case View order and refund status | Component: Identity & Access (field filter) | Validation: V6"
+"FR-20 Management shall obtain consolidated sales, stock and refund reports across regions, each showing an as-of time and the ","Story","Medium","fr rev-2.0 should","Management shall obtain consolidated sales, stock and refund reports across regions, each showing an as-of time and the number of pending synchronisation events.
+
+Source: Management (IQ-7)
+Priority score: 3.4 (Should)  V=4 R=3 E=3
+Revision: 2.0
+
+Acceptance criteria:
+Report sales total equals the independent sum of paid orders (14,940 in W3); regions with pending events are listed.
+
+Traceability: UML: Use case View refund audit and reports | Component: Reporting (read replica) | Validation: W3"
+"FR-21 Each region shall have versioned tax, shipping and refund-approval rules, changeable only by an administrator with a sec","Story","High","fr rev-2.0 must","Each region shall have versioned tax, shipping and refund-approval rules, changeable only by an administrator with a second approver, audited, and snapshotted on each order.
+
+Source: Admin (IQ-6), Finance
+Priority score: 4.2 (Must)  V=5 R=4 E=3
+Revision: 2.0
+
+Acceptance criteria:
+The same basket totals 2,400 in R01 and 2,290 in R02; a refund of 2,500 needs finance in both regions.
+
+Traceability: UML: Class RegionRule; Order.ruleVersion | Component: Regional Rules | Validation: W4 (versioning and two-person change: designed, not demonstrated)"
+"FR-22 A disconnected scanner or approval terminal shall buffer uniquely identified events and approval intents and synchronise","Story","High","fr rev-2.0 must","A disconnected scanner or approval terminal shall buffer uniquely identified events and approval intents and synchronise them idempotently; a locally queued approval shall display as PENDING_SERVER_VALIDATION until the server accepts it.
+
+Source: Picker (IQ-4), Finance
+Priority score: 4.4 (Must)  V=5 R=5 E=4
+Revision: 2.0
+
+Acceptance criteria:
+After reconnection each unique event is applied once even if resent; a support agent's queued approval is rejected by the server.
+
+Traceability: UML: Sequence 2 (offline sync); ScanEvent | Component: Edge Sync Agent; Sync Inbox | Validation: W2, W1"
+"FR-23 The system shall flag SKUs whose available stock falls to a configured fixed threshold (a deterministic rule, not machin","Story","Low","fr rev-1.0 could","The system shall flag SKUs whose available stock falls to a configured fixed threshold (a deterministic rule, not machine-learning forecasting).
+
+Source: Store manager
+Priority score: 2.4 (Could)  V=2 R=2 E=2
+Revision: 1.0
+
+Acceptance criteria:
+SKU with available ≤ threshold appears on the low-stock list.
+
+Traceability: UML: Class StockItem | Component: Inventory | Validation: Not validated – gap G-3"
+"NFR-01 Performance – at 50 concurrent users (baseline) and 500 (Rev 2.0), the 95th-percentile response time of 'place order' sh","Story","High","nfr rev-1.0 must","Performance – at 50 concurrent users (baseline) and 500 (Rev 2.0), the 95th-percentile response time of 'place order' shall be ≤ 800 ms and ≤ 1,200 ms respectively, excluding the gateway's hosted page, with ≤ 1 % errors over a 10-minute load test.
+
+Source: Customer (IQ-1)
+Priority score: 4.2 (Must)  V=5 R=4 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Load test LT-1/LT-2 (planned) reports P95 and error rate against these thresholds.
+
+Traceability: UML: Sequence steps 3–7 | Component: API instances; PostgreSQL | Validation: W1 (indicative only); LT-1, LT-2 planned"
+"NFR-02 Callback processing – 95 % of payment callbacks shall be acknowledged within 500 ms (gateway timeout assumed 3 s) and 10","Story","High","nfr rev-1.0 must","Callback processing – 95 % of payment callbacks shall be acknowledged within 500 ms (gateway timeout assumed 3 s) and 100 % of repeats shall have no side effect.
+
+Source: Gateway constraint
+Priority score: 4.8 (Must)  V=5 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Replay test of 1,000 callbacks with 10 % duplicates: 0 duplicate payments; P95 ≤ 500 ms.
+
+Traceability: UML: Sequence steps 1–11 | Component: Payment Integration | Validation: V2, W1"
+"NFR-03 Availability – checkout and callback endpoints ≥ 99.5 % per month (≈ 3.6 h per 30 days); a gateway or courier outage sha","Story","High","nfr rev-1.0 must","Availability – checkout and callback endpoints ≥ 99.5 % per month (≈ 3.6 h per 30 days); a gateway or courier outage shall not prevent accepting orders.
+
+Source: Management
+Priority score: 4.2 (Must)  V=5 R=4 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Monthly uptime from synthetic probes ≥ 99.5 %; with the courier down, orders are still accepted and paid.
+
+Traceability: UML: Deployment diagram (2 AZs); outbox | Component: Deployment; Background worker | Validation: V5, W3 (degradation only; uptime not demonstrated)"
+"NFR-04 Security (authorisation) – 100 % of endpoints shall enforce server-side role and ownership checks; the role is derived f","Story","High","nfr rev-1.0 must","Security (authorisation) – 100 % of endpoints shall enforce server-side role and ownership checks; the role is derived from the server session, never from the request. The role×endpoint matrix is tested in CI.
+
+Source: Admin, Finance
+Priority score: 4.6 (Must)  V=5 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Negative tests for every role × endpoint pair pass; no request field changes authority (V6).
+
+Traceability: UML: Use cases (actor associations) | Component: Identity & Access | Validation: V6"
+"NFR-05 Security (data protection) – no card data is stored or processed (hosted gateway page); personal data is encrypted in tr","Story","High","nfr rev-1.0 must","Security (data protection) – no card data is stored or processed (hosted gateway page); personal data is encrypted in transit (TLS 1.2+) and at rest; support views contain 0 payment fields.
+
+Source: Finance, Customer
+Priority score: 4.6 (Must)  V=5 R=5 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Schema scan finds no card-number fields; TLS scan grade ≥ A; support payload inspection shows 0 payment fields.
+
+Traceability: UML: Context diagram (gateway-hosted page) | Component: Identity & Access; Payment Integration | Validation: V6 (support view); other checks planned"
+"NFR-06 Usability – a picker confirms a pick in ≤ 3 interactions; ≥ 90 % of 5 test support agents find an order's status within ","Story","Medium","nfr rev-1.0 should","Usability – a picker confirms a pick in ≤ 3 interactions; ≥ 90 % of 5 test support agents find an order's status within 60 s; the checkout meets WCAG 2.1 AA (automated scan + keyboard walkthrough).
+
+Source: Picker, Support, Customer
+Priority score: 3.4 (Should)  V=4 R=3 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Usability test UT-1 (planned) meets the thresholds.
+
+Traceability: UML: Use cases | Component: React SPA | Validation: UT-1 planned"
+"NFR-07 Auditability – audit records are immutable (no UPDATE/DELETE privilege for the application role) and retained 7 years (a","Story","High","nfr rev-1.0 must","Auditability – audit records are immutable (no UPDATE/DELETE privilege for the application role) and retained 7 years (assumption A-09).
+
+Source: Finance
+Priority score: 4.4 (Must)  V=4 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Attempted UPDATE/DELETE on audit by the application role fails; retention policy configured.
+
+Traceability: UML: Class AuditEntry | Component: Audit; PostgreSQL grants | Validation: V6 (rows written); grants: design only"
+"NFR-08 Recoverability – RPO ≤ 5 minutes and RTO ≤ 60 minutes; a restore drill is run quarterly.","Story","Medium","nfr rev-1.0 should","Recoverability – RPO ≤ 5 minutes and RTO ≤ 60 minutes; a restore drill is run quarterly.
+
+Source: Management
+Priority score: 3.8 (Should)  V=4 R=4 E=3
+Revision: 1.0
+
+Acceptance criteria:
+Drill restores the latest backup + WAL within 60 min with ≤ 5 min data loss.
+
+Traceability: UML: Deployment diagram (backup artifact) | Component: PostgreSQL; backups | Validation: Planned drill RD-1"
+"NFR-09 Data integrity – order, stock, payment and refund invariants I1–I8 shall hold after every automated test run (checked by","Story","High","nfr rev-1.0 must","Data integrity – order, stock, payment and refund invariants I1–I8 shall hold after every automated test run (checked by an executable invariant script).
+
+Source: Engineers
+Priority score: 4.8 (Must)  V=5 R=5 E=2
+Revision: 1.0
+
+Acceptance criteria:
+Invariant script reports 8/8 holding after each scenario.
+
+Traceability: UML: Invariants (Q5) | Component: All modules | Validation: All scenarios"
+"NFR-10 Capacity (Rev 2.0) – sustain 1,000 stock/payment/scan events per minute (16.7/s) with 500 concurrent users within NFR-01","Story","High","nfr rev-2.0 must","Capacity (Rev 2.0) – sustain 1,000 stock/payment/scan events per minute (16.7/s) with 500 concurrent users within NFR-01 thresholds, and a 5× burst (83/s) for 5 minutes without data loss (assumption A-13).
+
+Source: Management (expansion)
+Priority score: 4.2 (Must)  V=5 R=4 E=3
+Revision: 2.0
+
+Acceptance criteria:
+Load test LT-2 (planned) at 1,000 events/min and 5× burst: P95 within threshold; 0 lost or duplicated events.
+
+Traceability: UML: Revised deployment diagram | Component: API ×3; sync-worker; PgBouncer | Validation: W1 (indicative); LT-2 planned"
+"NFR-11 Operability – a team of ≤ 4 engineers can deploy with a rolling release without downtime; domain modules have ≥ 80 % lin","Story","Low","nfr rev-1.0 could","Operability – a team of ≤ 4 engineers can deploy with a rolling release without downtime; domain modules have ≥ 80 % line coverage; local set-up is one command.
+
+Source: Engineers
+Priority score: 3.0 (Could)  V=3 R=3 E=3
+Revision: 1.0
+
+Acceptance criteria:
+CI pipeline report shows coverage ≥ 80 %; rolling deploy completes with 0 failed health probes.
+
+Traceability: UML: Deployment diagram (CI) | Component: CI/CD | Validation: Not validated – gap G-4"
+"NFR-12 Report freshness (Rev 2.0) – consolidated reports show data ≤ 5 minutes old in normal operation and display their as-of ","Story","Low","nfr rev-2.0 could","Report freshness (Rev 2.0) – consolidated reports show data ≤ 5 minutes old in normal operation and display their as-of time.
+
+Source: Management (IQ-7)
+Priority score: 2.8 (Could)  V=3 R=2 E=2
+Revision: 2.0
+
+Acceptance criteria:
+Report job runs every 5 min; as-of timestamp is visible on each report.
+
+Traceability: UML: Revised component diagram (Reporting) | Component: Reporting; read replica | Validation: W3 (as-of/pending shown); timing planned"
